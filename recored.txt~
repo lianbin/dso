@@ -1,0 +1,8 @@
+/home/lb/smb/sequence_02
+bin/dso_dataset \
+		files=/home/lb/smb/sequence_02/images.zip \
+		calib=/home/lb/smb/sequence_02/camera.txt \
+		gamma=/home/lb/smb/sequence_02/pcalib.txt \
+		vignette=/home/lb/smb/sequence_02/vignette.png \
+		preset=0 \
+		mode=0
