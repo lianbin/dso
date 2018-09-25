@@ -78,33 +78,34 @@ int computeHistQuantil(int* hist, float below)
 void PixelSelector::makeHists(const FrameHessian* const fh)
 {
 	gradHistFrame = fh;
-	float * mapmax0 = fh->absSquaredGrad[0];
+	float * mapmax0 = fh->absSquaredGrad[0];//梯度幅值的平方
 
 	int w = wG[0];
 	int h = hG[0];
 
+    //图像分成32*32的网格
 	int w32 = w/32;
 	int h32 = h/32;
-	thsStep = w32;
+	thsStep = w32;//一行的stepsize
 
-	for(int y=0;y<h32;y++)
-		for(int x=0;x<w32;x++)
+	for(int y=0;y<h32;y++)    //轮巡每一行
+		for(int x=0;x<w32;x++)//轮巡每一列
 		{
-			float* map0 = mapmax0+32*x+32*y*w;
+			float* map0 = mapmax0+32*x+32*y*w;//
 			int* hist0 = gradHist;// + 50*(x+y*w32);
 			memset(hist0,0,sizeof(int)*50);
 
-			for(int j=0;j<32;j++) for(int i=0;i<32;i++)
+			for(int j=0;j<32;j++) for(int i=0;i<32;i++)//循环32*32的网格
 			{
 				int it = i+32*x;
 				int jt = j+32*y;
 				if(it>w-2 || jt>h-2 || it<1 || jt<1) continue;
-				int g = sqrtf(map0[i+j*w]);
+				int g = sqrtf(map0[i+j*w]);//梯度幅值
 				if(g>48) g=48;
 				hist0[g+1]++;
 				hist0[0]++;
 			}
-
+            //得到本网格的梯度幅值的阈值  
 			ths[x+y*w32] = computeHistQuantil(hist0,setting_minGradHistCut) + setting_minGradHistAdd;
 		}
 
@@ -139,6 +140,8 @@ void PixelSelector::makeHists(const FrameHessian* const fh)
 
 
 }
+
+//(firstFrame, statusMap,densities[lvl]*w[0]*h[0],1,false,2)
 int PixelSelector::makeMaps(
 		const FrameHessian* const fh,
 		float* map_out, float density, int recursionsLeft, bool plot, float thFactor)
@@ -146,7 +149,7 @@ int PixelSelector::makeMaps(
 	float numHave=0;
 	float numWant=density;
 	float quotia;
-	int idealPotential = currentPotential;
+	int idealPotential = currentPotential;//3
 
 
 //	if(setting_pixelSelectionUseFast>0 && allowFast)
@@ -296,7 +299,7 @@ Eigen::Vector3i PixelSelector::select(const FrameHessian* const fh,
 		float* map_out, int pot, float thFactor)
 {
 
-	Eigen::Vector3f const * const map0 = fh->dI;
+	Eigen::Vector3f const * const map0 = fh->dI;//第0层，图像，dx ,dy
 
 	float * mapmax0 = fh->absSquaredGrad[0];
 	float * mapmax1 = fh->absSquaredGrad[1];

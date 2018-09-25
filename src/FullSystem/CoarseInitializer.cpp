@@ -802,10 +802,10 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 			if((lvl!=0 && statusMapB[x+y*wl]) || (lvl==0 && statusMap[x+y*wl] != 0))
 			{
 				//assert(patternNum==9);
-				pl[nl].u = x+0.1;
-				pl[nl].v = y+0.1;
-				pl[nl].idepth = 1;
-				pl[nl].iR = 1;
+				pl[nl].u = x+0.1;  //点坐标
+				pl[nl].v = y+0.1;  
+				pl[nl].idepth = 1; //初始化逆深度
+				pl[nl].iR = 1;     //逆深度方差？
 				pl[nl].isGood=true;
 				pl[nl].energy.setZero();
 				pl[nl].lastHessian=0;
@@ -818,8 +818,9 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 				{
 					int dx = patternP[idx][0];
 					int dy = patternP[idx][1];
+					//梯度幅值
 					float absgrad = cpt[dx + dy*w[lvl]].tail<2>().squaredNorm();
-					sumGrad2 += absgrad;
+					sumGrad2 += absgrad;//梯度幅值的和
 				}
 
 //				float gth = setting_outlierTH * (sqrtf(sumGrad2)+setting_outlierTHSumComponent);
