@@ -129,6 +129,7 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 
 		Mat88f H,Hsc; Vec8f b,bsc;
 		resetPoints(lvl);
+	    //见博客https://www.cnblogs.com/JingeTU/p/8297076.html
 		Vec3f resOld = calcResAndGS(lvl, H, b, Hsc, bsc, refToNew_current, refToNew_aff_current, false);
 		applyStep(lvl);
 
@@ -389,7 +390,7 @@ Vec3f CoarseInitializer::calcResAndGS(
 			int dy = patternP[idx][1];
 
 
-			Vec3f pt = RKi * Vec3f(point->u+dx, point->v+dy, 1) + t*point->idepth_new;
+			Vec3f pt = RKi * Vec3f(point->u+dx, point->v+dy, 1) + t*point->idepth_new;// (1)
 			//反投影归一化平面坐标
 			float u = pt[0] / pt[2];
 			float v = pt[1] / pt[2];
@@ -428,7 +429,7 @@ Vec3f CoarseInitializer::calcResAndGS(
 
             //https://www.cnblogs.com/JingeTU/p/8203606.html 公式32 
             //T的归一化平面坐标相对于HOST逆深度的导数
-			float dxdd = (t[0]-t[2]*u)/pt[2];
+			float dxdd = (t[0]-t[2]*u)/pt[2]; //注意这里的p[2]的倒数正是ρT/ρH。根据前面的(1)
 			float dydd = (t[1]-t[2]*v)/pt[2];
 
 			if(hw < 1) hw = sqrtf(hw);
@@ -453,13 +454,14 @@ Vec3f CoarseInitializer::calcResAndGS(
 			if(maxstep < point->maxstep) point->maxstep = maxstep;
 
 			// immediately compute dp*dd' and dd*dd' in JbBuffer1.
-			//计算J^T b
+			//计算
 			JbBuffer_new[i][0] += dp0[idx]*dd[idx];
 			JbBuffer_new[i][1] += dp1[idx]*dd[idx];
 			JbBuffer_new[i][2] += dp2[idx]*dd[idx];
 			JbBuffer_new[i][3] += dp3[idx]*dd[idx];
 			JbBuffer_new[i][4] += dp4[idx]*dd[idx];
 			JbBuffer_new[i][5] += dp5[idx]*dd[idx];
+			
 			JbBuffer_new[i][6] += dp6[idx]*dd[idx];
 			JbBuffer_new[i][7] += dp7[idx]*dd[idx];
 			
