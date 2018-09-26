@@ -113,7 +113,7 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 
 	SE3 refToNew_current = thisToNext;
 	AffLight refToNew_aff_current = thisToNext_aff;
-
+    //不知道原理是什么
 	if(firstFrame->ab_exposure>0 && newFrame->ab_exposure>0)
 		refToNew_aff_current = AffLight(logf(newFrame->ab_exposure /  firstFrame->ab_exposure),0); // coarse approximation.
 
@@ -125,7 +125,7 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 
 
 		if(lvl<pyrLevelsUsed-1)
-			propagateDown(lvl+1);
+			propagateDown(lvl+1);//使用上一层更新本层的深度
 
 		Mat88f H,Hsc; Vec8f b,bsc;
 		resetPoints(lvl);
@@ -384,13 +384,16 @@ Vec3f CoarseInitializer::calcResAndGS(
 		float energy=0;
 		for(int idx=0;idx<patternNum;idx++)
 		{
+		    //8邻域像素相对于中心像素的像素偏移(见论文公式(4)所示)
 			int dx = patternP[idx][0];
 			int dy = patternP[idx][1];
 
 
 			Vec3f pt = RKi * Vec3f(point->u+dx, point->v+dy, 1) + t*point->idepth_new;
+			//反投影归一化平面坐标
 			float u = pt[0] / pt[2];
 			float v = pt[1] / pt[2];
+			//像素坐标
 			float Ku = fxl * u + cxl;
 			float Kv = fyl * v + cyl;
 			float new_idepth = point->idepth_new/pt[2];
@@ -400,11 +403,12 @@ Vec3f CoarseInitializer::calcResAndGS(
 				isGood = false;
 				break;
 			}
-
+            //获取插值辐射值和梯度
 			Vec3f hitColor = getInterpolatedElement33(colorNew, Ku, Kv, wl);
 			//Vec3f hitColor = getInterpolatedElement33BiCub(colorNew, Ku, Kv, wl);
 
 			//float rlR = colorRef[point->u+dx + (point->v+dy) * wl][0];
+			//获取插值辐射值
 			float rlR = getInterpolatedElement31(colorRef, point->u+dx, point->v+dy, wl);
 
 			if(!std::isfinite(rlR) || !std::isfinite((float)hitColor[0]))
@@ -413,35 +417,43 @@ Vec3f CoarseInitializer::calcResAndGS(
 				break;
 			}
 
-
+            //计算辐照度残差
 			float residual = hitColor[0] - r2new_aff[0] * rlR - r2new_aff[1];
+			//huber权重
 			float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
+            
 			energy += hw *residual*residual*(2-hw);
 
 
 
-
+            //https://www.cnblogs.com/JingeTU/p/8203606.html 公式32 
+            //T的归一化平面坐标相对于HOST逆深度的导数
 			float dxdd = (t[0]-t[2]*u)/pt[2];
 			float dydd = (t[1]-t[2]*v)/pt[2];
 
 			if(hw < 1) hw = sqrtf(hw);
 			float dxInterp = hw*hitColor[1]*fxl;
 			float dyInterp = hw*hitColor[2]*fyl;
+			//dp0, dp1, dp2, dp3, dp4, dp5是光度误差对 se(3) 六个量的导数
 			dp0[idx] = new_idepth*dxInterp;
 			dp1[idx] = new_idepth*dyInterp;
 			dp2[idx] = -new_idepth*(u*dxInterp + v*dyInterp);
 			dp3[idx] = -u*v*dxInterp - (1+v*v)*dyInterp;
 			dp4[idx] = (1+u*u)*dxInterp + u*v*dyInterp;
 			dp5[idx] = -v*dxInterp + u*dyInterp;
+			//dp6 dp7光度误差对辐射仿射变换的参数的导数
 			dp6[idx] = - hw*r2new_aff[0] * rlR;
 			dp7[idx] = - hw*1;
+			//光度误差相对于逆深度的导数
 			dd[idx] = dxInterp * dxdd  + dyInterp * dydd;
+			//残差*huber权重
 			r[idx] = hw*residual;
 
 			float maxstep = 1.0f / Vec2f(dxdd*fxl, dydd*fyl).norm();
 			if(maxstep < point->maxstep) point->maxstep = maxstep;
 
 			// immediately compute dp*dd' and dd*dd' in JbBuffer1.
+			//计算J^T b
 			JbBuffer_new[i][0] += dp0[idx]*dd[idx];
 			JbBuffer_new[i][1] += dp1[idx]*dd[idx];
 			JbBuffer_new[i][2] += dp2[idx]*dd[idx];
@@ -450,6 +462,7 @@ Vec3f CoarseInitializer::calcResAndGS(
 			JbBuffer_new[i][5] += dp5[idx]*dd[idx];
 			JbBuffer_new[i][6] += dp6[idx]*dd[idx];
 			JbBuffer_new[i][7] += dp7[idx]*dd[idx];
+			
 			JbBuffer_new[i][8] += r[idx]*dd[idx];
 			JbBuffer_new[i][9] += dd[idx]*dd[idx];
 		}
@@ -726,7 +739,7 @@ void CoarseInitializer::propagateDown(int srcLvl)
 		if(!parent->isGood || parent->lastHessian < 0.1) continue;
 		if(!point->isGood)
 		{
-			point->iR = point->idepth = point->idepth_new = parent->iR;
+			point->iR = point->idepth = point->idepth_new = parent->iR;//设置为上一层的深度
 			point->isGood=true;
 			point->lastHessian=0;
 		}
@@ -974,7 +987,7 @@ void CoarseInitializer::makeNN()
 	// build indices
 	FLANNPointcloud pcs[PYR_LEVELS];
 	KDTree* indexes[PYR_LEVELS];
-	for(int i=0;i<pyrLevelsUsed;i++)
+	for(int i=0;i<pyrLevelsUsed;i++)//构建没一层的KDtree
 	{
 		pcs[i] = FLANNPointcloud(numPoints[i], points[i]);
 		indexes[i] = new KDTree(2, pcs[i], nanoflann::KDTreeSingleIndexAdaptorParams(5) );
@@ -984,10 +997,10 @@ void CoarseInitializer::makeNN()
 	const int nn=10;
 
 	// find NN & parents
-	for(int lvl=0;lvl<pyrLevelsUsed;lvl++)
+	for(int lvl=0;lvl<pyrLevelsUsed;lvl++)//循环金字塔层
 	{
-		Pnt* pts = points[lvl];
-		int npts = numPoints[lvl];
+		Pnt* pts = points[lvl];//当前层的point
+		int npts = numPoints[lvl];//point个数
 
 		int ret_index[nn];
 		float ret_dist[nn];
@@ -999,15 +1012,16 @@ void CoarseInitializer::makeNN()
 			//resultSet.init(pts[i].neighbours, pts[i].neighboursDist );
 			resultSet.init(ret_index, ret_dist);
 			Vec2f pt = Vec2f(pts[i].u,pts[i].v);
+			//获取10近邻
 			indexes[lvl]->findNeighbors(resultSet, (float*)&pt, nanoflann::SearchParams());
 			int myidx=0;
 			float sumDF = 0;
-			for(int k=0;k<nn;k++)
+			for(int k=0;k<nn;k++)//10近邻的索引号与距离
 			{
-				pts[i].neighbours[myidx]=ret_index[k];
+				pts[i].neighbours[myidx]=ret_index[k];//存储10近邻的索引号
 				float df = expf(-ret_dist[k]*NNDistFactor);
 				sumDF += df;
-				pts[i].neighboursDist[myidx]=df;
+				pts[i].neighboursDist[myidx]=df;//距离
 				assert(ret_index[k]>=0 && ret_index[k] < npts);
 				myidx++;
 			}
@@ -1018,18 +1032,18 @@ void CoarseInitializer::makeNN()
 			if(lvl < pyrLevelsUsed-1 )
 			{
 				resultSet1.init(ret_index, ret_dist);
-				pt = pt*0.5f-Vec2f(0.25f,0.25f);
+				pt = pt*0.5f-Vec2f(0.25f,0.25f);//当前层坐标在下一层的坐标点
 				indexes[lvl+1]->findNeighbors(resultSet1, (float*)&pt, nanoflann::SearchParams());
 
-				pts[i].parent = ret_index[0];
-				pts[i].parentDist = expf(-ret_dist[0]*NNDistFactor);
+				pts[i].parent = ret_index[0];//在上一层的最临近点
+				pts[i].parentDist = expf(-ret_dist[0]*NNDistFactor);//临近点的距离
 
 				assert(ret_index[0]>=0 && ret_index[0] < numPoints[lvl+1]);
 			}
 			else
 			{
-				pts[i].parent = -1;
-				pts[i].parentDist = -1;
+				pts[i].parent = -1;//已经是金字塔最高层
+				pts[i].parentDist = -1;//
 			}
 		}
 	}
